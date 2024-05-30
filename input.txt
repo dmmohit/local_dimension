@@ -1,0 +1,15 @@
+../maps/particle_density_64^3.bin
+10
+20
+10
+1e-4
+../outputs/output_uniform_weighted/
+8
+
+# 1 - map filename
+# 2 - minimum radius in grid units
+# 3 - maximum radius in grid units
+# 4 - no. of steps in R (divisible by (rmax-rmin))
+# 5 - threshold intensity
+# 6 - output directory (must end with '/')
+# 7 - maximum no. of threads
