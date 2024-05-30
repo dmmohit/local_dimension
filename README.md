@@ -10,12 +10,12 @@ Grid dimension along x-axis (ni) - int64
 Grid dimension along y-axis (nj) - int64  
 Grid dimension along z-axis (nk) - int64  
 Grid spacing in Mpc - float32  
-Values of the field in an array of size (ni*nj*nk) - float32
+Values of the field in an array of size (ni * nj * nk) - float32
 
 Run counter.c using  
 $ gcc -fopenmp -o counter counter.c  
 $ ./counter  
 
 lmfit module must be installed before running "fit.py". Run it using  
-$ python3 fit.py <rmin> <rmax> <step size> <input_directory (same as output directory of counter)> <max. no. of threads to use>  
+$ python3 fit.py <r_min> <r_max> <step_size> <input_directory (same as output directory of counter)> <max. no. of threads to use>  
 All distances must be in grid units.  
