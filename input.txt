@@ -2,9 +2,10 @@
 10
 20
 10
-1e-4
+0.0
 ../outputs/output_uniform_weighted/
 8
+10000
 
 # 1 - map filename
 # 2 - minimum radius in grid units
@@ -13,3 +14,4 @@
 # 5 - threshold intensity
 # 6 - output directory (must end with '/')
 # 7 - maximum no. of threads
+# 8 - no. of centres to be sampled
