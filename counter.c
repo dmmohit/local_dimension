@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include<sys/stat.h>
+#include<time.h>
 #include<omp.h>
 
 #define sqr(x) (x*x)
@@ -14,14 +15,16 @@ void main()
 	int rmin, rmax, nr, dr;	// minimum and maximum radii in grid units, no. of steps in r, step size in radius
 	float gs, rminmpc, rmaxmpc, rmpc, I0;	// grid spacing; minimum, maximum and current radii (in Mpc); threshold intensity
 	float *I;	// intensity grid
-	int index, i, j, k, ii, jj, kk, m, n;
+	int ind, index, i, j, k, l, ii, jj, kk, m, n;
 	int r, r0, count, *sizes, **xvals, **yvals, **zvals;	// r value (grid units); previous r value (grid units);
 															// counter for no. of cells within the annulus bounded by r0 and r;
-															// array to store the counts; x, y and z coordinates of cells within the annulus.
+															// array to store the counts; x, y and z coordinates of cells within the annulus;
+	int nonzerocount, *nonzero, *centres;	// no. of nonzero cells; indices of nonzero cells; indices of sampled centres
 	int i0, j0, k0, dist2;	// x, y, z coordinates of the chosen origin; counter for different r; Cartesian distance squared
-	int **Nvals, Ncount, nthreads;	// max no. of threads
-	float **Lvals, Lcount;
+	int Ncount, nthreads, ncentres;	// max no. of threads, no. of centres at which local dimension is to be determined
+	float Lcount;
 	float start_time, end_time;
+	time_t t;
 	
 	start_time = omp_get_wtime();
 
@@ -31,7 +34,7 @@ void main()
 		exit(1);
 	}
 	
-	if (fscanf(fin, "%s %d %d %d %f %s %d", mapfname, &rmin, &rmax, &nr, &I0, outpath, &nthreads) != 7)
+	if (fscanf(fin, "%s %d %d %d %f %s %d %d", mapfname, &rmin, &rmax, &nr, &I0, outpath, &nthreads, &ncentres) != 8)
 	{
         fprintf(stderr, "Error reading data from input file.\n");
         exit(1);
@@ -64,6 +67,7 @@ void main()
     printf("nr = %d\n", nr);
     printf("dr = %d\n", dr);
     printf("threshold intensity = %f (map units)\n", I0);
+	printf("bright centres to sample = %d\n", ncentres);
     printf("output directory: %s\n", outdir);
     
 	nijk = ni*nj*nk;
@@ -71,6 +75,8 @@ void main()
   	
   	fread(I, sizeof(float), nijk, fmap);
 	fclose(fmap);
+
+	printf("map data read successfully.\n");
 	
 	// counting the exact number of steps to be taken in r which need not be the same as the input value
 	// useful in case the given nr is not divisible by the radius range
@@ -130,6 +136,27 @@ void main()
         	
 		r0 = r;
 	}
+
+	printf("cells within each sphere identified.\n");
+
+	nonzerocount = 0;
+	for (index = 0; index < nijk; index++)
+		nonzerocount += (I[index] > I0) ? 1 : 0;
+		
+	nonzero = (int*) malloc(nonzerocount * sizeof(int));
+	centres = (int*) malloc(ncentres * sizeof(int));
+	
+	m = 0;
+	for (index = 0; index < nijk; index++)	{
+		if (I[index] > I0)
+			nonzero[m++] = index;
+	}
+
+	srand(time(&t));
+	for (m = 0; m < ncentres; m++)
+		centres[m] = nonzero[rand() % nonzerocount];
+
+	printf("sampled bright centres.\n");
 	
     struct stat st;	// checking if the output directory exists
     if (stat(outdir, &st) == -1) // Directory doesn't exist
@@ -139,7 +166,7 @@ void main()
             perror("mkdir");
             exit(1);
         }
-        printf("directory created: %s\n", outdir);
+        printf("output directory created: %s\n", outdir);
     } 
     else
         printf("output directory already exists.\n");
@@ -153,69 +180,62 @@ void main()
 		fout[n] = fopen(outfname, "wb");
 	}
 
-	Nvals = (int**) malloc(nk * sizeof(int*));
-	Lvals = (float**) malloc(nk * sizeof(float*));
-	for(k = 0; k < nk; k++)	{
-		Nvals[k] = (int*) malloc((nr+1) * sizeof(int));
-		Lvals[k] = (float*) malloc((nr+1) * sizeof(float));
-	}
-	
-	for(i = 0; i < ni; i++)
-		for(j = 0; j < nj; j++)
+	// Nvals = (int**) malloc(nk * sizeof(int*));
+	// Lvals = (float**) malloc(nk * sizeof(float*));
+	// for(k = 0; k < nk; k++)	{
+	// 	Nvals[k] = (int*) malloc((nr+1) * sizeof(int));
+	// 	Lvals[k] = (float*) malloc((nr+1) * sizeof(float));
+	// }
+
+	for (l = 0; l < ncentres; l++)
+	{
+		ind = centres[l];
+		k = ind % nk;
+		ind /= nk;
+		j = ind % nj;
+		i = ind / nj;
+		Ncount = 0;
+		Lcount = 0.0;
+		for(r = rmin, n = 0; r <= rmax; r += dr, n++)
 		{
-			#pragma omp parallel for num_threads(nthreads) private(Ncount,Lcount,r,n,m,ii,jj,kk,index)
-			for(k = 0; k < nk; k++)
+			for(m = 0; m < sizes[n]; m++)
 			{
-				Ncount = 0;
-				Lcount = 0.0;
-				for(r = rmin, n = 0; r <= rmax; r += dr, n++)
+				// coordinate transformation (adding grid dimensions to keep the values non-negative)
+				ii = xvals[n][m] + i - i0 + ni;
+				jj = yvals[n][m] + j - j0 + nj;
+				kk = zvals[n][m] + k - k0 + nk;
+				// applying periodic boundary conditions
+				ii -= ni*(ii/ni);
+				jj -= nj*(jj/nj);
+				kk -= nk*(kk/nk);
+				index = (ii*nj + jj)*nk + kk;
+				if(I[index] > I0)
 				{
-					Nvals[k][n] = Ncount;
-					Lvals[k][n] = Lcount;
-					for(m = 0; m < sizes[n]; m++)
-					{
-						// coordinate transformation (adding grid dimensions to keep the values non-negative)
-						ii = xvals[n][m] + i - i0 + ni;
-						jj = yvals[n][m] + j - j0 + nj;
-						kk = zvals[n][m] + k - k0 + nk;
-						// applying periodic boundary conditions
-						ii -= ni*(ii/ni);
-						jj -= nj*(jj/nj);
-						kk -= nk*(kk/nk);
-						index = (ii*nj + jj)*nk + kk;
-						if(I[index] > I0)
-						{
-							Nvals[k][n] += 1;
-							Lvals[k][n] += I[index];
-						}
-					}
-					
-					Ncount = Nvals[k][n];
-					Lcount = Lvals[k][n];
+					Ncount += 1;
+					Lcount += I[index];
 				}
-			}	
-					
-			for(k = 0; k < nk; k++)
-				for(n = 0; n < nr+1; n++)
-				{
-					fwrite(&i, 1, sizeof(int), fout[n]);
-					fwrite(&j, 1, sizeof(int), fout[n]);
-					fwrite(&k, 1, sizeof(int), fout[n]);
-					fwrite(&Nvals[k][n], 1, sizeof(int), fout[n]);
-					fwrite(&Lvals[k][n], 1, sizeof(float), fout[n]);
-				}
+			}
+			
+			fwrite(&i, 1, sizeof(int), fout[n]);
+			fwrite(&j, 1, sizeof(int), fout[n]);
+			fwrite(&k, 1, sizeof(int), fout[n]);
+			fwrite(&Ncount, 1, sizeof(int), fout[n]);
+			fwrite(&Lcount, 1, sizeof(int), fout[n]);
 		}
+	}
 	
 	for(r = rmin, n = 0; r <= rmax; r += dr, n++)	{
 		fclose(fout[n]);
 		free(xvals[n]); free(yvals[n]); free(zvals[n]);
 	}
 
-	for(k = 0; k < nk; k++)	{
-		free(Nvals[k]);
-		free(Lvals[k]);
-	}
-	free(xvals); free(yvals); free(zvals); free(Nvals); free(Lvals); free(sizes);
+	// for(k = 0; k < nk; k++)	{
+	// 	free(Nvals[k]);
+	// 	free(Lvals[k]);
+	// }
+	free(xvals); free(yvals); free(zvals);
+	// free(Nvals); free(Lvals);
+	free(sizes); free(nonzero); free(centres);
 		
 	end_time = omp_get_wtime();
 	printf("Executed in %fs\n", end_time - start_time);
