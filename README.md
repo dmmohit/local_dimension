@@ -17,5 +17,5 @@ $ gcc -fopenmp -o counter counter.c
 $ ./counter  
 
 lmfit module must be installed before running "fit.py". Run it using  
-$ python3 fit.py <r_min> <r_max> <step_size> <input_directory (same as output directory of counter)> <max. no. of threads to use>  
+$ python3 fit.py <r_min> <r_max> <step_size> <input_directory (same as output directory of counter)> <output_filename> <max. no. of threads to use>  
 All distances must be in grid units.  
