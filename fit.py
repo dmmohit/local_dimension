@@ -35,8 +35,8 @@ rmin = int(sys.argv[1])
 rmax = int(sys.argv[2])
 step = int(sys.argv[3])
 indir = sys.argv[4]
-outfname = f'../fit_results/Nvalues_uniform_hmf_{rmin}-{rmax}.bin'
-nthreads = int(sys.argv[5])
+outfname = '../fit_results/' + sys.argv[5]
+nthreads = int(sys.argv[6])
 
 r = []
 N = []
