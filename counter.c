@@ -21,8 +21,8 @@ void main()
 															// array to store the counts; x, y and z coordinates of cells within the annulus;
 	int nonzerocount, *nonzero, *centres;	// no. of nonzero cells; indices of nonzero cells; indices of sampled centres
 	int i0, j0, k0, dist2;	// x, y, z coordinates of the chosen origin; counter for different r; Cartesian distance squared
-	int Ncount, nthreads, ncentres;	// max no. of threads, no. of centres at which local dimension is to be determined
-	float Lcount;
+	int **Nvals, Ncount, nthreads, ncentres;	// max no. of threads, no. of centres at which local dimension is to be determined
+	float **Lvals, Lcount;
 	float start_time, end_time;
 	time_t t;
 	
@@ -180,13 +180,14 @@ void main()
 		fout[n] = fopen(outfname, "wb");
 	}
 
-	// Nvals = (int**) malloc(nk * sizeof(int*));
-	// Lvals = (float**) malloc(nk * sizeof(float*));
-	// for(k = 0; k < nk; k++)	{
-	// 	Nvals[k] = (int*) malloc((nr+1) * sizeof(int));
-	// 	Lvals[k] = (float*) malloc((nr+1) * sizeof(float));
-	// }
+	Nvals = (int**) malloc(ncentres * sizeof(int*));
+	Lvals = (float**) malloc(ncentres * sizeof(float*));
+	for(l = 0; l < ncentres; l++)	{
+		Nvals[l] = (int*) malloc((nr+1) * sizeof(int));
+		Lvals[l] = (float*) malloc((nr+1) * sizeof(float));
+	}
 
+	#pragma omp parallel for num_threads(nthreads) private(i,j,k,ind,Ncount,Lcount,r,n,m,ii,jj,kk,index)
 	for (l = 0; l < ncentres; l++)
 	{
 		ind = centres[l];
@@ -198,6 +199,8 @@ void main()
 		Lcount = 0.0;
 		for(r = rmin, n = 0; r <= rmax; r += dr, n++)
 		{
+			Nvals[l][n] = Ncount;
+			Lvals[l][n] = Lcount;
 			for(m = 0; m < sizes[n]; m++)
 			{
 				// coordinate transformation (adding grid dimensions to keep the values non-negative)
@@ -211,17 +214,27 @@ void main()
 				index = (ii*nj + jj)*nk + kk;
 				if(I[index] > I0)
 				{
-					Ncount += 1;
-					Lcount += I[index];
+					Nvals[l][n] += 1;
+					Lvals[l][n] += I[index];
 				}
 			}
-			
+			Ncount = Nvals[l][n];
+			Lcount = Lvals[l][n];
+		}
+	}
+
+	for(l = 0; l < ncentres; l++)	
+	{
+		for(n = 0; n < nr+1; n++)
+		{
 			fwrite(&i, 1, sizeof(int), fout[n]);
 			fwrite(&j, 1, sizeof(int), fout[n]);
 			fwrite(&k, 1, sizeof(int), fout[n]);
-			fwrite(&Ncount, 1, sizeof(int), fout[n]);
-			fwrite(&Lcount, 1, sizeof(int), fout[n]);
+			fwrite(&Nvals[l][n], 1, sizeof(int), fout[n]);
+			fwrite(&Lvals[l][n], 1, sizeof(float), fout[n]);
 		}
+		free(Nvals[l]);
+		free(Lvals[l]);
 	}
 	
 	for(r = rmin, n = 0; r <= rmax; r += dr, n++)	{
@@ -229,12 +242,12 @@ void main()
 		free(xvals[n]); free(yvals[n]); free(zvals[n]);
 	}
 
-	// for(k = 0; k < nk; k++)	{
-	// 	free(Nvals[k]);
-	// 	free(Lvals[k]);
+	// for(l = 0; l < ncentres; l++)	{
+	// 	free(Nvals[l]);
+	// 	free(Lvals[l]);
 	// }
 	free(xvals); free(yvals); free(zvals);
-	// free(Nvals); free(Lvals);
+	free(Nvals); free(Lvals);
 	free(sizes); free(nonzero); free(centres);
 		
 	end_time = omp_get_wtime();
